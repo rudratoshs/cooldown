@@ -1,0 +1,15 @@
+{
+  "name": "cooldown",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Cooldown — a pause between writing a heated message and sending it, gated on your own body settling. Presage SmartSpectra SDK Challenge entry.",
+  "scripts": {
+    "harness": "node harness.mjs",
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@smartspectra/node-sdk": "3.4.0"
+  }
+}

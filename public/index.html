@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Cooldown</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-phase="consent">
+    <div class="camera-dot" id="cameraDot" hidden><span></span> camera on</div>
+
+    <main class="stage">
+      <!-- CONSENT -->
+      <section class="screen" data-screen="consent">
+        <p class="eyebrow">a pause before you send</p>
+        <h1>Cooldown</h1>
+        <p class="lede">
+          Write the message you're heated about. Before it sends, Cooldown waits until your
+          <em>own</em> breathing and heart rate have settled back toward your resting baseline.
+        </p>
+        <div class="card consent">
+          <h2>Before the camera turns on</h2>
+          <ul>
+            <li><strong>Camera only</strong> — the microphone is never opened.</li>
+            <li><strong>Nothing is recorded.</strong> Video is processed in memory and never shown, saved, or sent anywhere. Only numbers (your pulse and breathing rate) are used.</li>
+            <li><strong>No account, no cloud, no storage.</strong> Close the app and nothing remains.</li>
+            <li><strong>SDK telemetry is off.</strong> Set explicitly to <code>enableTelemetry: false</code>.</li>
+            <li><strong>Not a medical device.</strong> It shows measurements; it never judges your emotional or medical state.</li>
+          </ul>
+        </div>
+        <button class="primary" data-action="calibrate">I understand — begin</button>
+      </section>
+
+      <!-- CALIBRATE -->
+      <section class="screen" data-screen="calibrating" hidden>
+        <p class="eyebrow">one moment</p>
+        <h1>Learning your baseline</h1>
+        <p class="lede">Sit comfortably, face the camera in even light, upper body in frame, and breathe normally. This is just your resting normal — nothing to do.</p>
+        <div class="ring" id="calRing"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="54"/><circle class="fill" id="calArc" cx="60" cy="60" r="54"/></svg><span id="calPct">0%</span></div>
+        <div class="readouts">
+          <div class="readout"><span class="rlabel">Pulse</span><span class="rvalue" id="calPulse">—</span><span class="rsamp" id="calPulseN">0 clean readings</span></div>
+          <div class="readout"><span class="rlabel">Breathing</span><span class="rvalue" id="calBreath">—</span><span class="rsamp" id="calBreathN">0 clean readings</span></div>
+        </div>
+        <p class="hint" id="calHint" hidden></p>
+        <div class="proceed" id="calProceed" hidden>
+          <p>Signal is noisy on this camera. You can keep waiting, or proceed with what we have.</p>
+          <button class="ghost" data-action="calibrate">Try again</button>
+        </div>
+      </section>
+
+      <!-- COMPOSE -->
+      <section class="screen wide" data-screen="ready" hidden>
+        <p class="eyebrow">say it. then wait a beat.</p>
+        <h1>Write the message</h1>
+        <textarea id="draft" rows="6" placeholder="The thing you want to fire off right now…"></textarea>
+        <div class="composebar">
+          <div class="minipulse"><span class="rlabel">Your pulse now</span> <span id="composePulse">—</span></div>
+          <button class="primary" data-action="arm" id="sendBtn">Send</button>
+        </div>
+        <p class="footnote">When you press Send, Cooldown holds it until your body settles. You can always release it yourself.</p>
+      </section>
+
+      <!-- COOLDOWN -->
+      <section class="screen wide" data-screen="cooldown" hidden>
+        <p class="eyebrow">not yet</p>
+        <h1 id="coolTitle">Take a moment.</h1>
+
+        <div class="pacer" id="pacer"><div class="pacer-dot"></div><span class="pacer-label">breathe with the circle</span></div>
+
+        <div class="meters">
+          <div class="meter" id="meterBreath">
+            <span class="mlabel">Breathing</span>
+            <span class="mval" id="coolBreath">—</span>
+            <span class="mstate" id="coolBreathState">warming up</span>
+          </div>
+          <div class="meter" id="meterPulse">
+            <span class="mlabel">Pulse</span>
+            <span class="mval" id="coolPulse">—</span>
+            <span class="mstate" id="coolPulseState">warming up</span>
+          </div>
+        </div>
+
+        <div class="progress">
+          <div class="pbar"><div class="pfill" id="pauseFill"></div></div>
+          <span class="plabel" id="pauseLabel">minimum pause…</span>
+        </div>
+
+        <p class="hrv" id="coolHrv">HRV: measuring… <span class="hrvnote">(a 60-second measurement, shown for interest — it does not control the gate)</span></p>
+        <p class="draftecho" id="draftEcho"></p>
+
+        <div class="coolactions">
+          <button class="primary" id="releaseBtn" data-action="release-when-ready" disabled>Holding…</button>
+          <button class="ghost" data-action="override">Release anyway</button>
+        </div>
+        <p class="footnote" id="coolHint"></p>
+      </section>
+
+      <!-- RELEASED -->
+      <section class="screen wide" data-screen="released" hidden>
+        <p class="eyebrow" id="releasedEyebrow">settled</p>
+        <h1 id="releasedTitle">You're steady.</h1>
+        <p class="lede" id="releasedLede">Your pulse and breathing have settled toward your baseline. Read it once more — then send it, or change it now that you've had the beat.</p>
+        <p class="draftecho big" id="releasedDraft"></p>
+        <div class="coolactions">
+          <button class="primary" id="copyBtn">Copy message</button>
+          <button class="ghost" data-action="reset">Write another</button>
+        </div>
+        <p class="footnote">Cooldown doesn't send for you — you stay in control of the final word.</p>
+      </section>
+    </main>
+
+    <footer class="appfoot">Presage SmartSpectra · processed on-device · telemetry off · nothing stored</footer>
+
+    <script>window.COOLDOWN_TOKEN = "__TOKEN__";</script>
+    <script src="/app.js"></script>
+  </body>
+</html>

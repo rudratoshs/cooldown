@@ -1,0 +1,11 @@
+node_modules/
+presage.key
+.env
+.env.local
+*.log
+harness-output*.txt
+# harness diagnostic output contains real biometric readings — never commit
+schema-first.json
+schema-late.json
+phase1-report.json
+.DS_Store
