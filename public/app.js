@@ -51,13 +51,31 @@ $("#copyBtn")?.addEventListener("click", async () => {
 
 // ---- render ----
 function render(s) {
+  // demo-mode transparency banner
+  const db = $("#demoBanner");
+  if (s.demo) {
+    db.hidden = false;
+    db.textContent = `DEMO MODE · ${Math.round(s.demo.minPauseMs / 1000)}s minimum pause · ${Math.round(s.demo.holdMs / 1000)}s stable hold`;
+  } else {
+    db.hidden = true;
+  }
+
   // phase → screen (client stays on consent until the user begins)
-  const map = { idle: "consent", calibrating: "calibrating", ready: "ready", cooldown: "cooldown", released: "released" };
+  const map = { idle: "consent", calibrating: "calibrating", ready: "ready", cooldown: "cooldown", released: "released", stopped: "stopped" };
   const screen = map[s.phase] || "consent";
   if (screen !== lastPhase) {
     showScreen(screen);
     lastPhase = screen;
-    if (screen === "released") $("#releasedDraft").textContent = draft;
+    if (screen === "released") {
+      $("#releasedDraft").textContent = draft;
+      // honest copy: did the body-gate open, or did the user override?
+      const override = s.releaseReason === "override";
+      $("#releasedEyebrow").textContent = override ? "released" : "settled";
+      $("#releasedTitle").textContent = override ? "Released." : "You're steady.";
+      $("#releasedLede").textContent = override
+        ? "You chose to release it before your signals settled — that's your call. Take one more look before you send it."
+        : "Your pulse and breathing have settled toward your baseline. Read it once more — then send it, or change it now that you've had the beat.";
+    }
   }
   $("#cameraDot").hidden = !(s.phase === "calibrating" || s.phase === "ready" || s.phase === "cooldown");
 

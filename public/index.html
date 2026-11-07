@@ -4,15 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Cooldown</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <!-- No external fonts or resources: the page makes zero third-party requests. -->
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body data-phase="consent">
+    <div class="demo-banner" id="demoBanner" hidden></div>
     <div class="camera-dot" id="cameraDot" hidden><span></span> camera on</div>
 
     <main class="stage">
@@ -49,21 +45,24 @@
         </div>
         <p class="hint" id="calHint" hidden></p>
         <div class="proceed" id="calProceed" hidden>
-          <p>Signal is noisy on this camera. You can keep waiting, or proceed with what we have.</p>
-          <button class="ghost" data-action="calibrate">Try again</button>
+          <p>This is taking longer than usual — the signal is noisy on this camera. Keep sitting still in even light and it will keep trying, or start the baseline over.</p>
+          <button class="ghost" data-action="calibrate">Start baseline over</button>
         </div>
+        <button class="linklike" data-action="stop" id="calStop">Stop camera</button>
       </section>
 
       <!-- COMPOSE -->
       <section class="screen wide" data-screen="ready" hidden>
         <p class="eyebrow">say it. then wait a beat.</p>
         <h1>Write the message</h1>
+        <p class="lede">This is a local draft — Cooldown isn't connected to Slack, email, or anywhere else. It holds what you write here, then you copy it out when you're ready.</p>
         <textarea id="draft" rows="6" placeholder="The thing you want to fire off right now…"></textarea>
         <div class="composebar">
           <div class="minipulse"><span class="rlabel">Your pulse now</span> <span id="composePulse">—</span></div>
           <button class="primary" data-action="arm" id="sendBtn">Send</button>
         </div>
-        <p class="footnote">When you press Send, Cooldown holds it until your body settles. You can always release it yourself.</p>
+        <p class="footnote">Press <strong>Send</strong> and Cooldown holds the draft until your pulse and breathing settle toward your baseline. You can release it yourself at any time.</p>
+        <button class="linklike" data-action="stop">Stop camera</button>
       </section>
 
       <!-- COOLDOWN -->
@@ -99,6 +98,17 @@
           <button class="ghost" data-action="override">Release anyway</button>
         </div>
         <p class="footnote" id="coolHint"></p>
+        <button class="linklike" data-action="stop">Stop camera</button>
+      </section>
+
+      <!-- STOPPED (visible privacy control) -->
+      <section class="screen" data-screen="stopped" hidden>
+        <p class="eyebrow">camera off</p>
+        <h1>Camera stopped.</h1>
+        <p class="lede">The camera is off and no measurements are being taken. Your draft is kept safe in this page. Resume when you're ready, or just close the tab.</p>
+        <div class="coolactions">
+          <button class="primary" data-action="resume">Resume</button>
+        </div>
       </section>
 
       <!-- RELEASED -->

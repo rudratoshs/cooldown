@@ -52,11 +52,14 @@ const decodeMetrics = messages.decodeMetrics;
 // ---- runtime state -------------------------------------------------------
 // COOLDOWN_DEMO=1 shortens the pause/hold so a full arc fits in a demo video.
 // The product default (60s pause + 15s hold) stays meaningful.
+// A 40s demo pause leaves room for the ~30s rolling breathing window to reflect
+// a real change. The UI shows a visible DEMO MODE label; no readings are faked.
 const DEMO = process.env.COOLDOWN_DEMO === "1" || process.env.COOLDOWN_DEMO === "true";
-const cfg = DEMO ? { ...DEFAULT_CFG, minPauseMs: 20000, holdMs: 8000 } : DEFAULT_CFG;
-if (DEMO) console.log("  [demo pacing: 20s minimum pause, 8s hold]");
+const cfg = DEMO ? { ...DEFAULT_CFG, minPauseMs: 40000, holdMs: 8000 } : DEFAULT_CFG;
+if (DEMO) console.log("  [DEMO MODE: 40s minimum pause, 8s hold — production is 60s/15s]");
 let sdk = null;
-let phase = "idle"; // idle | calibrating | ready | cooldown | released
+let phase = "idle"; // idle | calibrating | ready | cooldown | released | stopped
+let releaseReason = null; // "biometric" (gate opened) | "override" (user chose)
 let calStartedAt = 0;
 let baseline = null;
 let tracker = null;
@@ -133,6 +136,7 @@ function snapshot() {
     gate = tracker.update(now(), { pulse: fp, breathing: fb }, baseline);
     if (gate.unlocked && phase === "cooldown") {
       phase = "released";
+      releaseReason = "biometric";
       stopSdk(); // message settled — the camera's job is done
     }
   }
@@ -158,6 +162,8 @@ function snapshot() {
         : null,
     gate,
     hint: lastValidationHint,
+    releaseReason: phase === "released" ? releaseReason : null,
+    demo: DEMO ? { minPauseMs: cfg.minPauseMs, holdMs: cfg.holdMs } : null,
     cfg: { holdMs: cfg.holdMs, minPauseMs: cfg.minPauseMs },
   };
 }
@@ -168,6 +174,7 @@ function control(type) {
   switch (type) {
     case "calibrate":
       baseline = null;
+      releaseReason = null;
       calSamples.pulse = [];
       calSamples.breathing = [];
       calStartedAt = now();
@@ -177,15 +184,18 @@ function control(type) {
     case "arm": // user pressed Send on a heated message
       if (baseline) {
         tracker = new GateTracker(now(), cfg);
+        releaseReason = null;
         phase = "cooldown";
       }
       break;
     case "override": // Rule 2: never permanently block a message
       phase = "released";
+      releaseReason = "override";
       stopSdk();
       break;
     case "reset": // write another message
       tracker = null;
+      releaseReason = null;
       if (baseline) {
         phase = "ready";
         startSdk(); // bring the camera back for the next message
@@ -193,9 +203,17 @@ function control(type) {
         phase = "idle";
       }
       break;
-    case "stop":
-      phase = "idle";
+    case "stop": // visible privacy control — turn the camera off, keep the draft
+      phase = "stopped";
       stopSdk();
+      break;
+    case "resume":
+      if (baseline) {
+        phase = "ready";
+        startSdk();
+      } else {
+        phase = "idle";
+      }
       break;
   }
   return snapshot();
