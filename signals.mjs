@@ -7,13 +7,24 @@ export const DEFAULT_CFG = {
   // a reading only counts if the SDK marks it stable AND confidence >= min
   pulseMinConf: 70, // pulse hit 99.5% in validation; 70 is a safe trust floor
   breathingMinConf: 55, // breathing hit 83%; 55 trust floor
-  // "eased" means at or below the personal baseline plus a small margin
-  pulseMargin: 2, // bpm above baseline still counts as eased
-  breathingMargin: 1.5, // breaths/min above baseline still counts as eased
-  // how long both signals must stay eased, continuously, before unlock
+  // "eased" means at or below the personal baseline plus a margin. Pulse is the
+  // gate (reliable, high-confidence); the margin absorbs normal variation and a
+  // slightly low baseline. Breathing is shown alongside but does not block —
+  // breathing-rate readings are too sparse/variable to be a hard release gate.
+  pulseMargin: 4, // bpm above baseline still counts as eased
+  breathingMargin: 2, // breaths/min above baseline still counts as eased (display)
+  // pulse counts as eased if it has dropped this many bpm from the "heated"
+  // reference captured just after Send — robust to an unrepresentative baseline
+  pulseDropBpm: 6,
+  // window after Send in which the heated reference pulse is captured
+  armWindowMs: 6000,
+  // how long the pulse must stay eased, continuously, before unlock
   holdMs: 15000,
   // a floor so the pause is always meaningful even if the body settles fast
   minPauseMs: 60000,
+  // a ceiling: the pause always ends by here, even if the signal never cleanly
+  // eases (noisy camera, stubborn pulse) — the message is never trapped
+  maxPauseMs: 180000,
   // baseline calibration needs at least this many clean samples of each signal
   minBaselineSamples: 5,
   // breathing readings are sparse; require a few more before trusting the median
@@ -66,17 +77,50 @@ export class GateTracker {
     this.startedAt = startedAt;
     this.cfg = cfg;
     this.calmSince = null;
+    this.armRef = null; // the "heated" pulse captured just after Send
   }
   update(now, latest, baseline) {
-    const c = classifyReading(latest, baseline, this.cfg);
-    if (c.bothOk) {
+    const c = classifyReading(latest, baseline, this.cfg); // c.pulseOk (absolute), c.breathingOk (display)
+    const pulseTrusted = readingTrusted(latest.pulse, this.cfg.pulseMinConf);
+
+    // capture the heated reference: the highest trusted pulse in the arm window
+    if (pulseTrusted && now - this.startedAt <= this.cfg.armWindowMs) {
+      this.armRef = Math.max(this.armRef ?? -Infinity, latest.pulse.value);
+    }
+
+    // Pulse is the gate, and it is "eased" by EITHER path:
+    //  - absolute: at/near the resting baseline, OR
+    //  - relative: dropped pulseDropBpm from the heated reference (robust to a
+    //    baseline that was measured too low to ever reach again)
+    const droppedEnough =
+      pulseTrusted && this.armRef != null && latest.pulse.value <= this.armRef - this.cfg.pulseDropBpm;
+    const pulseEased = c.pulseOk || droppedEnough;
+
+    if (pulseEased) {
       if (this.calmSince == null) this.calmSince = now;
     } else {
-      this.calmSince = null; // any break resets the hold
+      this.calmSince = null;
     }
     const heldMs = this.calmSince == null ? 0 : now - this.calmSince;
-    const minPauseMet = now - this.startedAt >= this.cfg.minPauseMs;
-    const unlocked = minPauseMet && heldMs >= this.cfg.holdMs;
-    return { ...c, heldMs, minPauseMet, unlocked, elapsedMs: now - this.startedAt };
+    const elapsedMs = now - this.startedAt;
+    const minPauseMet = elapsedMs >= this.cfg.minPauseMs;
+    const maxPauseMet = elapsedMs >= this.cfg.maxPauseMs;
+
+    const biometricUnlock = minPauseMet && heldMs >= this.cfg.holdMs;
+    const unlocked = biometricUnlock || maxPauseMet;
+    // honest reason: the body settled, or the pause simply ran its full course
+    const reason = unlocked ? (biometricUnlock ? "biometric" : "timeout") : null;
+
+    return {
+      ...c,
+      pulseEased,
+      armRef: this.armRef,
+      heldMs,
+      minPauseMet,
+      maxPauseMet,
+      unlocked,
+      reason,
+      elapsedMs,
+    };
   }
 }

@@ -55,8 +55,8 @@ const decodeMetrics = messages.decodeMetrics;
 // A 40s demo pause leaves room for the ~30s rolling breathing window to reflect
 // a real change. The UI shows a visible DEMO MODE label; no readings are faked.
 const DEMO = process.env.COOLDOWN_DEMO === "1" || process.env.COOLDOWN_DEMO === "true";
-const cfg = DEMO ? { ...DEFAULT_CFG, minPauseMs: 40000, holdMs: 8000 } : DEFAULT_CFG;
-if (DEMO) console.log("  [DEMO MODE: 40s minimum pause, 8s hold — production is 60s/15s]");
+const cfg = DEMO ? { ...DEFAULT_CFG, minPauseMs: 40000, holdMs: 8000, maxPauseMs: 70000 } : DEFAULT_CFG;
+if (DEMO) console.log("  [DEMO MODE: 40s minimum pause, 8s hold, 70s ceiling — production is 60s/15s/180s]");
 let sdk = null;
 let phase = "idle"; // idle | calibrating | ready | cooldown | released | stopped
 let releaseReason = null; // "biometric" (gate opened) | "override" (user chose)
@@ -136,8 +136,8 @@ function snapshot() {
     gate = tracker.update(now(), { pulse: fp, breathing: fb }, baseline);
     if (gate.unlocked && phase === "cooldown") {
       phase = "released";
-      releaseReason = "biometric";
-      stopSdk(); // message settled — the camera's job is done
+      releaseReason = gate.reason || "biometric"; // "biometric" (settled) or "timeout" (pause ran its course)
+      stopSdk(); // the pause is over — the camera's job is done
     }
   }
   return {
@@ -164,7 +164,7 @@ function snapshot() {
     hint: lastValidationHint,
     releaseReason: phase === "released" ? releaseReason : null,
     demo: DEMO ? { minPauseMs: cfg.minPauseMs, holdMs: cfg.holdMs } : null,
-    cfg: { holdMs: cfg.holdMs, minPauseMs: cfg.minPauseMs },
+    cfg: { holdMs: cfg.holdMs, minPauseMs: cfg.minPauseMs, maxPauseMs: cfg.maxPauseMs },
   };
 }
 const round1 = (x) => (typeof x === "number" ? Math.round(x * 10) / 10 : x);
@@ -281,6 +281,19 @@ setInterval(() => {
   const line = `data: ${JSON.stringify(snapshot())}\n\n`;
   for (const res of clients) res.write(line);
 }, 250);
+
+server.on("error", (e) => {
+  if (e.code === "EADDRINUSE") {
+    console.error(
+      `\n  Port ${PORT} is already in use — another Cooldown is probably still running.\n` +
+        `  Stop it with:   lsof -ti tcp:${PORT} | xargs kill\n` +
+        `  then run \`npm start\` again.\n`,
+    );
+  } else {
+    console.error("server error:", e?.message || e);
+  }
+  process.exit(1);
+});
 
 server.listen(PORT, HOST, () => {
   console.log(`\n  Cooldown is running.  Open:  http://${HOST}:${PORT}/?t=${TOKEN}\n`);

@@ -68,13 +68,24 @@ function render(s) {
     lastPhase = screen;
     if (screen === "released") {
       $("#releasedDraft").textContent = draft;
-      // honest copy: did the body-gate open, or did the user override?
-      const override = s.releaseReason === "override";
-      $("#releasedEyebrow").textContent = override ? "released" : "settled";
-      $("#releasedTitle").textContent = override ? "Released." : "You're steady.";
-      $("#releasedLede").textContent = override
-        ? "You chose to release it before your signals settled — that's your call. Take one more look before you send it."
-        : "Your pulse and breathing have settled toward your baseline. Read it once more — then send it, or change it now that you've had the beat.";
+      // honest copy for each way the pause can end
+      const r = s.releaseReason;
+      if (r === "override") {
+        $("#releasedEyebrow").textContent = "released";
+        $("#releasedTitle").textContent = "Released.";
+        $("#releasedLede").textContent =
+          "You chose to release it before your pulse settled — that's your call. Take one more look before you send it.";
+      } else if (r === "timeout") {
+        $("#releasedEyebrow").textContent = "the pause is over";
+        $("#releasedTitle").textContent = "You've had the beat.";
+        $("#releasedLede").textContent =
+          "You've taken the full pause. Your pulse hasn't fully come down — take one more breath if you need it, then read it once more before you send.";
+      } else {
+        $("#releasedEyebrow").textContent = "settled";
+        $("#releasedTitle").textContent = "You're steady.";
+        $("#releasedLede").textContent =
+          "Your pulse has come down. Read it once more — then send it, or change it now that you've had the beat.";
+      }
     }
   }
   $("#cameraDot").hidden = !(s.phase === "calibrating" || s.phase === "ready" || s.phase === "cooldown");
@@ -119,25 +130,31 @@ function render(s) {
         ? `eased · near your ${base.breathingBpm?.toFixed?.(0) ?? base.breathingBpm}/min`
         : `above your baseline (${base.breathingBpm?.toFixed?.(0) ?? base.breathingBpm}/min)`;
 
-    // pulse meter
+    // pulse meter (the gate) — eased by returning to baseline OR dropping from the heated peak
     const pm = $("#meterPulse");
-    pm.className = "meter" + (g.pulseOk ? " eased" : L.pulse ? " elevated" : "");
+    pm.className = "meter" + (g.pulseEased ? " eased" : L.pulse ? " elevated" : "");
+    const baseP = base.pulseBpm?.toFixed?.(0) ?? base.pulseBpm;
     $("#coolPulse").textContent = L.pulse ? `${L.pulse.value} bpm` : "—";
     $("#coolPulseState").textContent = !L.pulse
       ? "warming up"
-      : g.pulseOk
-        ? `eased · near your ${base.pulseBpm?.toFixed?.(0) ?? base.pulseBpm} bpm`
-        : `above your baseline (${base.pulseBpm?.toFixed?.(0) ?? base.pulseBpm} bpm)`;
+      : g.pulseEased
+        ? g.pulseOk
+          ? `eased · near your ${baseP} bpm`
+          : "easing · coming down"
+        : `above your baseline (${baseP} bpm)`;
 
     // progress: minimum pause first, then the steadiness hold
     const minPauseMet = g.minPauseMet;
     let pct, label;
+    const el = g.elapsedMs || 0;
     if (!minPauseMet) {
-      pct = Math.min(100, (100 * (g.elapsedMs || 0)) / s.cfg.minPauseMs);
-      label = `a minimum pause — ${secs(s.cfg.minPauseMs - (g.elapsedMs || 0))}s left`;
-    } else if (!g.bothOk) {
-      pct = 0;
-      label = "waiting for both to ease toward your baseline";
+      pct = Math.min(100, (100 * el) / s.cfg.minPauseMs);
+      label = `a minimum pause — ${secs(s.cfg.minPauseMs - el)}s left`;
+    } else if (!g.pulseEased) {
+      // not settled yet — show the pause running toward its ceiling; it WILL end
+      const span = Math.max(1, s.cfg.maxPauseMs - s.cfg.minPauseMs);
+      pct = Math.min(100, (100 * (el - s.cfg.minPauseMs)) / span);
+      label = `your pulse is still up — the pause ends in ${secs(s.cfg.maxPauseMs - el)}s`;
     } else {
       pct = Math.min(100, (100 * (g.heldMs || 0)) / s.cfg.holdMs);
       label = `holding steady — ${secs(s.cfg.holdMs - (g.heldMs || 0))}s left`;
@@ -152,7 +169,7 @@ function render(s) {
 
     // the release button reflects state; server auto-advances to "released" on unlock
     const rb = $("#releaseBtn");
-    rb.textContent = g.unlocked ? "Settled" : minPauseMet && g.bothOk ? "Almost…" : "Holding…";
+    rb.textContent = g.unlocked ? "Settled" : minPauseMet && g.pulseEased ? "Almost…" : "Holding…";
     $("#coolHint").textContent = s.hint || "";
   }
 }

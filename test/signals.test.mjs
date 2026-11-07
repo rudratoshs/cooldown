@@ -99,12 +99,43 @@ test("GateTracker: needs minPause AND continuous hold; a break resets hold", () 
   assert.equal(r.unlocked, true);
 });
 
-test("GateTracker: staying heated never unlocks (override is the only out)", () => {
-  const baseline = { pulseBpm: 60, breathingBpm: 14 };
+test("GateTracker: pulse is the gate — elevated breathing does NOT block release", () => {
+  const baseline = { pulseBpm: 60, breathingBpm: 9 };
   const cfg = { ...DEFAULT_CFG, minPauseMs: 1000, holdMs: 1000 };
   const g = new GateTracker(0, cfg);
-  const heated = { pulse: pulse(100), breathing: breath(24) };
+  // pulse eased, but breathing stuck well above baseline (the real-world case
+  // that used to hang forever)
+  const pulseCalmBreathHigh = { pulse: pulse(58), breathing: breath(14) };
   let r;
-  for (let t = 500; t <= 120000; t += 500) r = g.update(t, heated, baseline);
-  assert.equal(r.unlocked, false, "body-gate alone never forces a send");
+  for (let t = 500; t <= 4000; t += 500) r = g.update(t, pulseCalmBreathHigh, baseline);
+  assert.equal(r.breathingOk, false, "breathing is still above baseline");
+  assert.equal(r.pulseOk, true);
+  assert.equal(r.unlocked, true, "pulse eased + held + pause met -> unlocks regardless of breathing");
+});
+
+test("GateTracker: relative drop — pulse eases by dropping from the heated reference, even if baseline is never reached", () => {
+  const baseline = { pulseBpm: 54, breathingBpm: 9 }; // low baseline, like the real case
+  const cfg = { ...DEFAULT_CFG, minPauseMs: 1000, holdMs: 1000, armWindowMs: 2000, pulseDropBpm: 6, maxPauseMs: 999999 };
+  const g = new GateTracker(0, cfg);
+  g.update(500, { pulse: pulse(86), breathing: breath(8) }, baseline); // heated ref = 86
+  let r = g.update(1500, { pulse: pulse(85), breathing: breath(8) }, baseline); // only -1
+  assert.equal(r.pulseEased, false, "a 1 bpm dip is not eased");
+  g.update(3000, { pulse: pulse(79), breathing: breath(8) }, baseline); // -7 from 86
+  r = g.update(4500, { pulse: pulse(79), breathing: breath(8) }, baseline);
+  assert.equal(r.pulseOk, false, "absolute baseline (54) never reached: 79 > 58");
+  assert.equal(r.pulseEased, true, "dropped >=6 bpm from heated -> eased");
+  assert.equal(r.unlocked, true);
+  assert.equal(r.reason, "biometric");
+});
+
+test("GateTracker: a stubborn pulse never biometric-unlocks, but the pause ends at the ceiling (timeout)", () => {
+  const baseline = { pulseBpm: 60, breathingBpm: 9 };
+  const cfg = { ...DEFAULT_CFG, minPauseMs: 1000, holdMs: 1000, maxPauseMs: 10000 };
+  const g = new GateTracker(0, cfg);
+  const heated = { pulse: pulse(100), breathing: breath(24) }; // never eases, never drops
+  let r = g.update(5000, heated, baseline);
+  assert.equal(r.unlocked, false, "before the ceiling a stubborn pulse stays held");
+  r = g.update(10000, heated, baseline);
+  assert.equal(r.unlocked, true, "the pause always ends by the ceiling — words are never trapped");
+  assert.equal(r.reason, "timeout", "released by the pause running its course, not by the body settling");
 });
